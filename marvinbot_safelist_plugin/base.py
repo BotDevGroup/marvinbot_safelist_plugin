@@ -204,10 +204,10 @@ class WerewolfSafeList(Plugin):
     def on_text(self, update):
         dt = update.message.date - update.message.forward_date
         text = trim_accents(update.message.text.lower())
-        # if dt.total_seconds() > self.config.get('max_forward_date_diff'):
-        #     log.info("Player forwarded an old message")
-        #     update.message.reply_text('❌ Your forward is too old.')
-        #     return
+        if dt.total_seconds() > self.config.get('max_forward_date_diff'):
+            log.info("Player forwarded an old message")
+            update.message.reply_text('❌ Your forward is too old.')
+            return
 
         if "players alive" in text:
             return
