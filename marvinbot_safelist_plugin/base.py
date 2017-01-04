@@ -82,6 +82,7 @@ class WerewolfSafeList(Plugin):
                          .add_argument('--roles', help='List all the safe roles', action='store_true')
                          .add_argument('--add-role', help='Temporarily adds a safe role')
                          .add_argument('--remove-role', help='Temporarily removes a safe role'))
+        self.add_handler(CommandHandler('sfclear', self.on_sfclear_command, command_description='Clear safelist'))
         self.add_handler(CommandHandler('sl', self.on_sf_command, command_description='Safelist')
                          .add_argument('--clear', help='Clear the safe list', action='store_true')
                          .add_argument('--roles', help='List all the safe roles', action='store_true')
@@ -99,6 +100,8 @@ class WerewolfSafeList(Plugin):
             self.message_id = None
             self.safelist.clear()
             update.message.reply_text('🚮 Cleared safelist.')
+    def on_sfclear_command(self, update, *args, **kwargs):
+        self.clear_safelist(update, True)
 
     def on_sf_command(self, update, *args, **kwargs):
         clear = kwargs.get('clear')
