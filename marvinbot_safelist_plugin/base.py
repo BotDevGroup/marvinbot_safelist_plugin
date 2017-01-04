@@ -52,6 +52,7 @@ class WerewolfSafeList(Plugin):
         self.safe_roles = []
         self.moderators = []
         self.last_message_hash = ''
+        self.last_update = None
 
     def get_default_config(self):
         return {
@@ -92,14 +93,20 @@ class WerewolfSafeList(Plugin):
     def setup_schedules(self, adapter):
         pass
 
-    def clear_safelist(self, update):
+    def clear_safelist(self, update, notify=False):
         with self.lock:
             if len(self.safelist) == 0:
                 update.message.reply_text('❌ Safelist is already cleared.')
                 return
             self.message_id = None
             self.safelist.clear()
-            update.message.reply_text('🚮 Cleared safelist.')
+            log.info('Safelist cleared')
+            if notify:
+                self.adapter.bot.sendMessage(chat_id=self.chat_id, text="🚮 {} cleared the safelist.".format(update.message.from_user.first_name))
+            else:
+                self.adapter.bot.sendMessage(chat_id=self.chat_id, text="🚮 Safelist cleared.")
+            # update.message.reply_text('🚮 Cleared safelist.')
+
     def on_sfclear_command(self, update, *args, **kwargs):
         self.clear_safelist(update, True)
 
@@ -110,7 +117,7 @@ class WerewolfSafeList(Plugin):
         remove_role = kwargs.get('remove_role')
 
         if clear:
-            self.clear_safelist(update)
+            self.clear_safelist(update, True)
         elif roles:
             self.show_safe_roles(update)
         else:
@@ -188,7 +195,6 @@ class WerewolfSafeList(Plugin):
             self.message_id = msg.message_id
 
     def add_safelist_member(self, update, member):
-        with self.lock:
             self.safelist.append(member)
             update.message.reply_text('✅ Added to safelist.')
 
@@ -198,19 +204,24 @@ class WerewolfSafeList(Plugin):
             update.message.reply_text('❌ Your forward is too old.')
             return
 
-        if any(member.get_user().id == update.message.from_user.id for member in self.safelist):
-            update.message.reply_text('❌ You are already in the safelist.')
-            return
+        dtu = update.message.forward_date - self.last_update if self.last_update is not None else None
+        if dtu is not None and dtu.total_seconds() > self.config.get('max_forward_date_diff'):
+            self.clear_safelist(update, False)
 
-        for role in self.safe_roles:
-            text = trim_accents(update.message.text.lower())
-            if role in text:
-                # Fix Sorcerer containing seer
-                if role == 'seer' and 'sorcerer' in text:
-                    continue
-                if role == 'seer' and 'sorcerer' in text:
-                    continue
-                member = SafelistMember(update.message.from_user, role)
-                self.add_safelist_member(update, member)
-                self.show_safelist()
-                break
+        with self.lock:
+            if any(member.get_user().id == update.message.from_user.id for member in self.safelist):
+                update.message.reply_text('❌ You are already in the safelist.')
+                return
+
+            for role in self.safe_roles:
+                text = trim_accents(update.message.text.lower())
+                if role in text:
+                    # Fix Sorcerer containing seer
+                    if role == 'seer' and 'sorcerer' in text:
+                        continue
+
+                    member = SafelistMember(update.message.from_user, role)
+                    self.add_safelist_member(update, member)
+                    self.show_safelist()
+                    self.last_update = update.message.forward_date
+                    break
