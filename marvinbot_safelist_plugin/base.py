@@ -83,20 +83,20 @@ class WerewolfSafeList(Plugin):
                          .add_argument('--roles', help='List all the safe roles', action='store_true')
                          .add_argument('--add-role', help='Temporarily adds a safe role')
                          .add_argument('--remove-role', help='Temporarily removes a safe role'))
-        self.add_handler(CommandHandler('sfclear', self.on_sfclear_command, command_description='Clear safelist'))
-        self.add_handler(CommandHandler('slclear', self.on_sfclear_command, command_description='Clear safelist'))
         self.add_handler(CommandHandler('sl', self.on_sf_command, command_description='Safelist')
                          .add_argument('--clear', help='Clear the safe list', action='store_true')
                          .add_argument('--roles', help='List all the safe roles', action='store_true')
                          .add_argument('--add-role', help='Temporarily adds a safe role')
                          .add_argument('--remove-role', help='Temporarily removes a safe role'))
+        self.add_handler(CommandHandler('sfclear', self.on_sfclear_command, command_description='Clear safelist'))
+        self.add_handler(CommandHandler('slclear', self.on_sfclear_command, command_description='Clear safelist'))
 
     def setup_schedules(self, adapter):
         pass
 
     def clear_safelist(self, update, notify=False):
         with self.lock:
-            if len(self.safelist) == 0:
+            if len(self.safelist) == 0 and notify:
                 update.message.reply_text('❌ Safelist is already cleared.')
                 return
             self.message_id = None
@@ -181,8 +181,9 @@ class WerewolfSafeList(Plugin):
     def show_safelist(self, force_new=False):
         text = "*Safelist*:\n\n{}".format(self.generate_safelist_response())
         texthash = hashlib.sha256(text.encode())
-        if texthash == self.last_message_hash:
+        if not force_new and texthash == self.last_message_hash:
             return
+        self.last_message_hash = texthash
         message = {
             "chat_id": self.chat_id,
             "text": text,
@@ -196,36 +197,38 @@ class WerewolfSafeList(Plugin):
             self.message_id = msg.message_id
 
     def add_safelist_member(self, update, member):
-            self.safelist.append(member)
-            update.message.reply_text('✅ Added to safelist.')
+        self.safelist.append(member)
+        log.info("Added {} to safelist".format(member.get_role()))
+        update.message.reply_text('✅ Added to safelist.')
 
     def on_text(self, update):
         dt = update.message.date - update.message.forward_date
         text = trim_accents(update.message.text.lower())
-        if dt.total_seconds() > self.config.get('max_forward_date_diff'):
-            update.message.reply_text('❌ Your forward is too old.')
-            return
+        # if dt.total_seconds() > self.config.get('max_forward_date_diff'):
+        #     log.info("Player forwarded an old message")
+        #     update.message.reply_text('❌ Your forward is too old.')
+        #     return
 
         if "players alive" in text:
             return
 
         dtu = update.message.forward_date - self.last_update if self.last_update is not None else None
-        if dtu is not None and dtu.total_seconds() > self.config.get('max_forward_date_diff'):
+        if dtu is not None and dtu.total_seconds() > self.config.get('max_forward_date_diff') and len(self.safelist) > 0:
             self.clear_safelist(update, False)
 
+        added = False
         with self.lock:
             if any(member.get_user().id == update.message.from_user.id for member in self.safelist):
                 update.message.reply_text('❌ You are already in the safelist.')
                 return
 
             for role in self.safe_roles:
-                if role in text:
+                if role in text and 'sorcerer' not in text:
                     # Fix Sorcerer containing seer
-                    if role == 'seer' and 'sorcerer' in text:
-                        continue
-
                     member = SafelistMember(update.message.from_user, role)
                     self.add_safelist_member(update, member)
-                    self.show_safelist()
+                    added = True
                     self.last_update = update.message.forward_date
                     break
+        if added:
+            self.show_safelist()
