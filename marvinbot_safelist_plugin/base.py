@@ -201,8 +201,12 @@ class WerewolfSafeList(Plugin):
 
     def on_text(self, update):
         dt = update.message.date - update.message.forward_date
+        text = trim_accents(update.message.text.lower())
         if dt.total_seconds() > self.config.get('max_forward_date_diff'):
             update.message.reply_text('❌ Your forward is too old.')
+            return
+
+        if "players alive" in text:
             return
 
         dtu = update.message.forward_date - self.last_update if self.last_update is not None else None
@@ -215,7 +219,6 @@ class WerewolfSafeList(Plugin):
                 return
 
             for role in self.safe_roles:
-                text = trim_accents(update.message.text.lower())
                 if role in text:
                     # Fix Sorcerer containing seer
                     if role == 'seer' and 'sorcerer' in text:
